@@ -1,0 +1,8 @@
+{
+	"name": "com.github.tacticallaptopbag.resistance",
+	"description": "Web monitoring link for Resistance",
+	"path": "$EXE_PATH",
+	"type": "stdio",
+	"$ALLOWED_EXT": [ "$EXT_ID" ]
+}
+
