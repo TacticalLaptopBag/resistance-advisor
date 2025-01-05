@@ -23,7 +23,10 @@ impl BrowserHandler {
                 let msg = match Self::read_msg(&mut stdin) {
                     Ok(msg) => msg,
                     Err(e) => {
-                        warn!("Incoming message from Overwatch was in an invalid format: {}", e);
+                        warn!(
+                            "Incoming message from Overwatch was in an invalid format: {}",
+                            e
+                        );
                         continue;
                     }
                 };
@@ -44,72 +47,55 @@ impl BrowserHandler {
                 socket.incognito_allowed = incognito;
             }
             RxBrowserMsg::Navigation { url } => {
-                match socket.send(TxSocketMsg::Navigation { url }) {
-                    Ok(_) => (),
-                    Err(e) => {
+                socket
+                    .send(TxSocketMsg::Navigation { url })
+                    .unwrap_or_else(|e| {
                         error!("Failed to relay Navigation message to Overwatch: {}", e);
-                        return;
-                    }
-                }
+                    });
             }
         }
     }
 
     fn read_msg(stdin: &mut StdinLock) -> Result<RxBrowserMsg, serde_json::Error> {
         // Get the length of the incoming message
-        let msg_len = match crate::deserialize_length(stdin) {
-            Ok(len) => len,
-            Err(e) => {
-                error!("Failed to read length of message from Scanner: {}", e);
-                process::exit(1);
-            }
-        };
+        let msg_len = crate::deserialize_length(stdin).unwrap_or_else(|e| {
+            error!("Failed to read length of message from Scanner: {}", e);
+            process::exit(1);
+        });
 
         let mut msg_buf = vec![0u8; msg_len];
-        match stdin.read_exact(&mut msg_buf) {
-            Ok(_) => (),
-            Err(e) => {
-                error!("Failed to read incoming message from Scanner: {}", e);
-                process::exit(1);
-            }
-        }
+        stdin.read_exact(&mut msg_buf).unwrap_or_else(|e| {
+            error!("Failed to read incoming message from Scanner: {}", e);
+            process::exit(1);
+        });
 
-        let msg_str = match String::from_utf8(msg_buf) {
-            Ok(str) => str,
-            Err(e) => {
-                error!(
-                    "Incoming message from Scanner was not encoded in UTF-8: {}",
-                    e
-                );
-                process::exit(1);
-            }
-        };
+        let msg_str = String::from_utf8(msg_buf).unwrap_or_else(|e| {
+            error!(
+                "Incoming message from Scanner was not encoded in UTF-8: {}",
+                e
+            );
+            process::exit(1);
+        });
 
         return serde_json::from_str(msg_str.as_str());
     }
 
     fn send_msg(stdout: &mut StdoutLock, msg: &TxBrowserMsg) {
-        let response_str = match serde_json::to_string(msg) {
-            Ok(str) => str,
-            Err(e) => {
-                error!("Failed to serialize message to Scanner: {}", e);
-                process::exit(1);
-            }
-        };
+        let response_str = serde_json::to_string(msg).unwrap_or_else(|e| {
+            error!("Failed to serialize message to Scanner: {}", e);
+            process::exit(1);
+        });
         let response_buf = response_str.into_bytes();
         let response_len = response_buf.len();
 
         let len_bytes = crate::serialize_length(response_len);
-        match stdout
+        stdout
             .write_all(&len_bytes)
             .and(stdout.write_all(&response_buf))
             .and(stdout.flush())
-        {
-            Ok(_) => (),
-            Err(e) => {
+            .unwrap_or_else(|e| {
                 error!("Failed to write message to Scanner: {}", e);
                 process::exit(1);
-            }
-        }
+            });
     }
 }

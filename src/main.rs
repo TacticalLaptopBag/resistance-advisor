@@ -32,13 +32,10 @@ fn init_logging() {
         pid: process::id(),
     };
 
-    let syslog_logger = match syslog::unix(formatter) {
-        Ok(logger) => logger,
-        Err(e) => {
-            eprintln!("Failed to connect to syslog: {}", e);
-            process::exit(1);
-        }
-    };
+    let syslog_logger = syslog::unix(formatter).unwrap_or_else(|e| {
+        eprintln!("Failed to connect to syslog: {}", e);
+        process::exit(1);
+    });
 
     let syslog_box = Box::new(BasicLogger::new(syslog_logger));
 
@@ -50,13 +47,12 @@ fn init_logging() {
         simplelog::ColorChoice::Auto,
     );
 
-    match multi_log::MultiLogger::init(vec![syslog_box, term_logger], cons::LOG_LEVEL) {
-        Ok(_) => (),
-        Err(e) => {
+    multi_log::MultiLogger::init(vec![syslog_box, term_logger], cons::LOG_LEVEL).unwrap_or_else(
+        |e| {
             eprintln!("Failed to initialize loggers: {}", e);
             process::exit(1);
-        }
-    }
+        },
+    );
 }
 
 fn main() {

@@ -22,21 +22,16 @@ impl SocketHandler {
 
         thread::spawn(move || {
             let write_lock = Arc::new(Mutex::new(()));
-            let mut overwatch = match UnixStream::connect(cons::OVERWATCH_SOCKET_PATH) {
-                Ok(sock) => sock,
-                Err(e) => {
+            let mut overwatch =
+                UnixStream::connect(cons::OVERWATCH_SOCKET_PATH).unwrap_or_else(|e| {
                     error!("Failed to connect to Overwatch socket: {}", e);
                     process::exit(1);
-                }
-            };
+                });
 
-            let heartbeat_overwatch = match overwatch.try_clone() {
-                Ok(sock) => sock,
-                Err(e) => {
-                    error!("Failed to clone handle to Overwatch socket: {}", e);
-                    process::exit(1);
-                }
-            };
+            let heartbeat_overwatch = overwatch.try_clone().unwrap_or_else(|e| {
+                error!("Failed to clone handle to Overwatch socket: {}", e);
+                process::exit(1);
+            });
             let heartbeat_write_lock = Arc::clone(&write_lock);
 
             // Start listening for messages
@@ -60,52 +55,39 @@ impl SocketHandler {
     }
 
     fn send_msg(msg: &TxSocketMsg, overwatch: &mut UnixStream, write_lock: &Arc<Mutex<()>>) {
-        let msg_str = match serde_json::to_string(&msg) {
-            Ok(str) => str,
-            Err(e) => {
-                error!("Failed to serialize message to string: {}", e);
-                process::exit(1);
-            }
-        };
+        let msg_str = serde_json::to_string(&msg).unwrap_or_else(|e| {
+            error!("Failed to serialize message to string: {}", e);
+            process::exit(1);
+        });
         let msg_buf = msg_str.into_bytes();
         let msg_len_bytes = crate::serialize_length(msg_buf.len());
 
         // Get a lock on writing to Overwatch
-        let _guard = match write_lock.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let _guard = write_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-        match overwatch
+        overwatch
             .write_all(&msg_len_bytes)
             .and(overwatch.write_all(&msg_buf).and(overwatch.flush()))
-        {
-            Ok(_) => (),
-            Err(e) => {
+            .unwrap_or_else(|e| {
                 error!("Failed to write message to Overwatch socket: {}", e);
                 process::exit(1);
-            }
-        };
+            });
     }
 
     fn incoming_msg_thread(mut overwatch: UnixStream, write_lock: Arc<Mutex<()>>) {
         loop {
-            let msg_len = match crate::deserialize_length(&mut overwatch) {
-                Ok(len) => len,
-                Err(e) => {
-                    error!("Failed to deserialize socket message length: {}", e);
-                    process::exit(1);
-                }
-            };
+            let msg_len = crate::deserialize_length(&mut overwatch).unwrap_or_else(|e| {
+                error!("Failed to deserialize socket message length: {}", e);
+                process::exit(1);
+            });
 
             let mut msg_buf = vec![0u8; msg_len];
-            match overwatch.read_exact(&mut msg_buf) {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Failed to read socket message: {}", e);
-                    process::exit(1);
-                }
-            }
+            overwatch.read_exact(&mut msg_buf).unwrap_or_else(|e| {
+                error!("Failed to read socket message: {}", e);
+                process::exit(1);
+            });
 
             let msg_str = match String::from_utf8(msg_buf) {
                 Ok(str) => str,
