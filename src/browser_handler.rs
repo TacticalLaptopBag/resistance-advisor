@@ -1,7 +1,9 @@
 use std::io;
-use std::io::{Read, Write, StdinLock, StdoutLock};
-use std::thread::{self, JoinHandle};
+use std::io::{Read, StdinLock, StdoutLock, Write};
 use std::process;
+use std::thread::{self, JoinHandle};
+
+use log::{error, warn};
 
 use crate::models::{RxBrowserMsg, TxSocketMsg};
 use crate::{models::TxBrowserMsg, socket_handler::SocketHandler};
@@ -18,7 +20,13 @@ impl BrowserHandler {
             let mut stdout = io::stdout().lock();
 
             loop {
-                let msg = Self::read_msg(&mut stdin);
+                let msg = match Self::read_msg(&mut stdin) {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        warn!("Incoming message from Overwatch was in an invalid format: {}", e);
+                        continue;
+                    }
+                };
                 Self::handle_msg(msg, &mut socket);
                 let response = TxBrowserMsg::Ack {};
                 Self::send_msg(&mut stdout, &response);
@@ -34,41 +42,74 @@ impl BrowserHandler {
         match msg {
             RxBrowserMsg::Init { incognito } => {
                 socket.incognito_allowed = incognito;
-            },
+            }
             RxBrowserMsg::Navigation { url } => {
-                socket.send(TxSocketMsg::Navigation { 
-                    url
-                }).expect("Failed to relay Navigation message");
-            },
+                match socket.send(TxSocketMsg::Navigation { url }) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("Failed to relay Navigation message to Overwatch: {}", e);
+                        return;
+                    }
+                }
+            }
         }
     }
 
-    fn read_msg(stdin: &mut StdinLock) -> RxBrowserMsg {
+    fn read_msg(stdin: &mut StdinLock) -> Result<RxBrowserMsg, serde_json::Error> {
         // Get the length of the incoming message
         let msg_len = match crate::deserialize_length(stdin) {
             Ok(len) => len,
             Err(e) => {
-                eprintln!("Failed to read length of message from extension: {}", e);
+                error!("Failed to read length of message from Scanner: {}", e);
                 process::exit(1);
             }
         };
 
         let mut msg_buf = vec![0u8; msg_len];
-        let _ = stdin.read_exact(&mut msg_buf);
+        match stdin.read_exact(&mut msg_buf) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Failed to read incoming message from Scanner: {}", e);
+                process::exit(1);
+            }
+        }
 
-        let msg_str = String::from_utf8(msg_buf).unwrap();
+        let msg_str = match String::from_utf8(msg_buf) {
+            Ok(str) => str,
+            Err(e) => {
+                error!(
+                    "Incoming message from Scanner was not encoded in UTF-8: {}",
+                    e
+                );
+                process::exit(1);
+            }
+        };
 
-        return serde_json::from_str(msg_str.as_str()).unwrap();
+        return serde_json::from_str(msg_str.as_str());
     }
 
     fn send_msg(stdout: &mut StdoutLock, msg: &TxBrowserMsg) {
-        // let response_buf = msg.dump().into_bytes();
-        let response_buf = serde_json::to_string(msg).unwrap().into_bytes();
+        let response_str = match serde_json::to_string(msg) {
+            Ok(str) => str,
+            Err(e) => {
+                error!("Failed to serialize message to Scanner: {}", e);
+                process::exit(1);
+            }
+        };
+        let response_buf = response_str.into_bytes();
         let response_len = response_buf.len();
 
         let len_bytes = crate::serialize_length(response_len);
-        let _ = stdout.write_all(&len_bytes);
-        let _ = stdout.write_all(&response_buf);
-        let _ = stdout.flush();
+        match stdout
+            .write_all(&len_bytes)
+            .and(stdout.write_all(&response_buf))
+            .and(stdout.flush())
+        {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Failed to write message to Scanner: {}", e);
+                process::exit(1);
+            }
+        }
     }
 }
