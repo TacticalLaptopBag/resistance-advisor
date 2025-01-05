@@ -4,41 +4,30 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type")]
 pub enum RxBrowserMsg {
     #[serde(rename = "init")]
-    Init {
-        incognito: bool,
-    },
+    Init { incognito: bool },
     #[serde(rename = "navigation")]
-    Navigation {
-        url: String,
-    },
+    Navigation { url: String },
 }
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 pub enum TxBrowserMsg {
     #[serde(rename = "ack")]
-    Ack {
-        
-    }
+    Ack {},
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum RxSocketMsg {
     #[serde(rename = "heartbeat")]
-    Heartbeat { }
+    Heartbeat {},
 }
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 pub enum TxSocketMsg {
     #[serde(rename = "heartbeat")]
-    Heartbeat { 
-        incognito: bool
-    },
+    Heartbeat { incognito: bool },
     #[serde(rename = "navigation")]
-    Navigation {
-        url: String,
-    },
+    Navigation { url: String },
 }
-
