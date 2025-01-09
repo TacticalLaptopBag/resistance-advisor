@@ -44,7 +44,9 @@ impl BrowserHandler {
     fn handle_msg(msg: RxBrowserMsg, socket: &mut SocketHandler) {
         match msg {
             RxBrowserMsg::Init { incognito } => {
-                socket.incognito_allowed = incognito;
+                let mut socket_incognito = socket.incognito_allowed.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                *socket_incognito = incognito;
             }
             RxBrowserMsg::Navigation { url } => {
                 socket

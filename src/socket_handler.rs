@@ -3,6 +3,7 @@ use log::{error, warn};
 use crate::cons;
 use crate::models::{OverwatchMsg, AdvisorMsg};
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::os::unix::net::UnixStream;
 use std::process;
 use std::sync::mpsc::SendError;
@@ -11,7 +12,7 @@ use std::thread;
 
 pub struct SocketHandler {
     sender: mpsc::Sender<AdvisorMsg>,
-    pub incognito_allowed: bool,
+    pub incognito_allowed: Arc<Mutex<bool>>,
 }
 
 impl SocketHandler {
@@ -20,6 +21,8 @@ impl SocketHandler {
     pub fn new() -> SocketHandler {
         let (sender, receiver) = mpsc::channel();
 
+        let incognito_allowed = Arc::new(Mutex::new(false));
+        let incognito_thread = Arc::clone(&incognito_allowed);
         thread::spawn(move || {
             let write_lock = Arc::new(Mutex::new(()));
             let mut overwatch =
@@ -36,7 +39,7 @@ impl SocketHandler {
 
             // Start listening for messages
             thread::spawn(move || {
-                Self::incoming_msg_thread(heartbeat_overwatch, heartbeat_write_lock)
+                Self::incoming_msg_thread(heartbeat_overwatch, heartbeat_write_lock, incognito_thread);
             });
 
             while let Ok(socket_msg) = receiver.recv() {
@@ -46,7 +49,7 @@ impl SocketHandler {
 
         return SocketHandler {
             sender,
-            incognito_allowed: false,
+            incognito_allowed,
         };
     }
 
@@ -76,7 +79,7 @@ impl SocketHandler {
             });
     }
 
-    fn incoming_msg_thread(mut overwatch: UnixStream, write_lock: Arc<Mutex<()>>) {
+    fn incoming_msg_thread(mut overwatch: UnixStream, write_lock: Arc<Mutex<()>>, incognito_allowed: Arc<Mutex<bool>>) {
         loop {
             let msg_len = crate::deserialize_length(&mut overwatch).unwrap_or_else(|e| {
                 error!("Failed to deserialize socket message length: {}", e);
@@ -109,7 +112,7 @@ impl SocketHandler {
                     continue;
                 }
             };
-            Self::handle_incoming_msg(msg, &mut overwatch, &write_lock);
+            Self::handle_incoming_msg(msg, &mut overwatch, &write_lock, &incognito_allowed);
         }
     }
 
@@ -117,9 +120,14 @@ impl SocketHandler {
         msg: OverwatchMsg,
         overwatch: &mut UnixStream,
         write_lock: &Arc<Mutex<()>>,
+        incognito_allowed: &Arc<Mutex<bool>>,
     ) {
         let response: Option<AdvisorMsg> = match msg {
-            OverwatchMsg::Heartbeat {} => Some(AdvisorMsg::Heartbeat { incognito: false }),
+            OverwatchMsg::Heartbeat {} => {
+                let incognito = incognito_allowed.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                Some(AdvisorMsg::Heartbeat { incognito: *incognito })
+            },
         };
 
         match response {
