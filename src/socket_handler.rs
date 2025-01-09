@@ -1,7 +1,7 @@
 use log::{error, warn};
 
 use crate::cons;
-use crate::models::{RxSocketMsg, TxSocketMsg};
+use crate::models::{OverwatchMsg, AdvisorMsg};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::process;
@@ -10,7 +10,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 pub struct SocketHandler {
-    sender: mpsc::Sender<TxSocketMsg>,
+    sender: mpsc::Sender<AdvisorMsg>,
     pub incognito_allowed: bool,
 }
 
@@ -50,11 +50,11 @@ impl SocketHandler {
         };
     }
 
-    pub fn send(&self, msg: TxSocketMsg) -> Result<(), SendError<TxSocketMsg>> {
+    pub fn send(&self, msg: AdvisorMsg) -> Result<(), SendError<AdvisorMsg>> {
         return self.sender.send(msg);
     }
 
-    fn send_msg(msg: &TxSocketMsg, overwatch: &mut UnixStream, write_lock: &Arc<Mutex<()>>) {
+    fn send_msg(msg: &AdvisorMsg, overwatch: &mut UnixStream, write_lock: &Arc<Mutex<()>>) {
         let msg_str = serde_json::to_string(&msg).unwrap_or_else(|e| {
             error!("Failed to serialize message to string: {}", e);
             process::exit(1);
@@ -99,7 +99,7 @@ impl SocketHandler {
                     continue;
                 }
             };
-            let msg: RxSocketMsg = match serde_json::from_str(&msg_str) {
+            let msg: OverwatchMsg = match serde_json::from_str(&msg_str) {
                 Ok(msg) => msg,
                 Err(e) => {
                     warn!(
@@ -114,12 +114,12 @@ impl SocketHandler {
     }
 
     fn handle_incoming_msg(
-        msg: RxSocketMsg,
+        msg: OverwatchMsg,
         overwatch: &mut UnixStream,
         write_lock: &Arc<Mutex<()>>,
     ) {
-        let response: Option<TxSocketMsg> = match msg {
-            RxSocketMsg::Heartbeat {} => Some(TxSocketMsg::Heartbeat { incognito: false }),
+        let response: Option<AdvisorMsg> = match msg {
+            OverwatchMsg::Heartbeat {} => Some(AdvisorMsg::Heartbeat { incognito: false }),
         };
 
         match response {

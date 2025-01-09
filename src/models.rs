@@ -18,14 +18,14 @@ pub enum TxBrowserMsg {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type")]
-pub enum RxSocketMsg {
+pub enum OverwatchMsg {
     #[serde(rename = "heartbeat")]
     Heartbeat {},
 }
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
-pub enum TxSocketMsg {
+pub enum AdvisorMsg {
     #[serde(rename = "heartbeat")]
     Heartbeat { incognito: bool },
     #[serde(rename = "navigation")]

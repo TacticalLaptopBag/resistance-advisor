@@ -5,7 +5,7 @@ use std::thread::{self, JoinHandle};
 
 use log::{error, warn};
 
-use crate::models::{RxBrowserMsg, TxSocketMsg};
+use crate::models::{RxBrowserMsg, AdvisorMsg};
 use crate::{models::TxBrowserMsg, socket_handler::SocketHandler};
 
 pub struct BrowserHandler {
@@ -48,7 +48,7 @@ impl BrowserHandler {
             }
             RxBrowserMsg::Navigation { url } => {
                 socket
-                    .send(TxSocketMsg::Navigation { url })
+                    .send(AdvisorMsg::Navigation { url })
                     .unwrap_or_else(|e| {
                         error!("Failed to relay Navigation message to Overwatch: {}", e);
                     });
