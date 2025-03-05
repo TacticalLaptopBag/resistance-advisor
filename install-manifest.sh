@@ -1,7 +1,8 @@
 #!/bin/bash
 
 
-EXE_PATH=`realpath ./target/debug/resistance-advisor`
+# EXE_PATH=`realpath ./target/debug/resistance-advisor`
+EXE_PATH=/usr/local/bin/resistance-advisor
 MANIFEST_NAME=com.github.tacticallaptopbag.resistance.json
 
 cp ./native-messaging-manifest.template.json ./native-messaging-manifest.firefox.json
